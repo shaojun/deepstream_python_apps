@@ -23,7 +23,7 @@ sys.path.append('../')
 import gi
 
 gi.require_version('Gst', '1.0')
-from gi.repository import GObject, Gst
+from gi.repository import GObject, Gst, GstRtspServer
 import sys
 from optparse import OptionParser
 from common.is_aarch_64 import is_aarch64
@@ -588,10 +588,62 @@ def main(args):
         sys.stderr.write(" Unable to create queue2 \n")
 
     if no_display:
-        print("Creating FakeSink \n")
-        sink = Gst.ElementFactory.make("fakesink", "fakesink")
+        # print("Creating FakeSink \n")
+        # sink = Gst.ElementFactory.make("fakesink", "fakesink")
+        # if not sink:
+        #     sys.stderr.write(" Unable to create fakesink \n")
+
+        # shawn, we create a RTSP out here
+        nvvidconv_postosd = Gst.ElementFactory.make("nvvideoconvert", "convertor_postosd")
+        if not nvvidconv_postosd:
+            sys.stderr.write(" Unable to create nvvidconv_postosd \n")
+        # Create a caps filter
+        caps = Gst.ElementFactory.make("capsfilter", "filter")
+        caps.set_property("caps", Gst.Caps.from_string("video/x-raw(memory:NVMM), format=I420"))
+
+        codec = "H264"
+        # default bitrate is 4000000
+        bitrate = 2000000
+        # Make the encoder
+        if codec == "H264":
+            encoder = Gst.ElementFactory.make("nvv4l2h264enc", "encoder")
+            print("Creating H264 Encoder")
+        elif codec == "H265":
+            encoder = Gst.ElementFactory.make("nvv4l2h265enc", "encoder")
+            print("Creating H265 Encoder")
+        if not encoder:
+            sys.stderr.write(" Unable to create encoder")
+        encoder.set_property('bitrate', bitrate)
+        if is_aarch64():
+            encoder.set_property('preset-level', 1)
+            encoder.set_property('insert-sps-pps', 1)
+            encoder.set_property('bufapi-version', 1)
+
+        # Make the payload-encode video into RTP packets
+        if codec == "H264":
+            rtppay = Gst.ElementFactory.make("rtph264pay", "rtppay")
+            print("Creating H264 rtppay")
+        elif codec == "H265":
+            rtppay = Gst.ElementFactory.make("rtph265pay", "rtppay")
+            print("Creating H265 rtppay")
+        if not rtppay:
+            sys.stderr.write(" Unable to create rtppay")
+
+        # Make the UDP sink
+        updsink_port_num = 5400
+        sink = Gst.ElementFactory.make("udpsink", "udpsink")
         if not sink:
-            sys.stderr.write(" Unable to create fakesink \n")
+            sys.stderr.write(" Unable to create udpsink")
+
+        sink.set_property('host', '224.224.255.255')
+        sink.set_property('port', updsink_port_num)
+        sink.set_property('async', False)
+        sink.set_property('sync', 1)
+
+        pipeline.add(nvvidconv_postosd)
+        pipeline.add(caps)
+        pipeline.add(encoder)
+        pipeline.add(rtppay)
     else:
         if is_aarch64():
             transform = Gst.ElementFactory.make("nvegltransform",
@@ -685,7 +737,12 @@ def main(args):
         queue2.link(transform)
         transform.link(sink)
     else:
-        queue2.link(sink)
+        queue2.link(nvvidconv_postosd)
+        # nvosd.link(nvvidconv_postosd)
+        nvvidconv_postosd.link(caps)
+        caps.link(encoder)
+        encoder.link(rtppay)
+        rtppay.link(sink)
     sink_pad = queue1.get_static_pad("sink")
     tee_msg_pad = tee.get_request_pad('src_%u')
     tee_render_pad = tee.get_request_pad("src_%u")
@@ -700,6 +757,22 @@ def main(args):
     bus = pipeline.get_bus()
     bus.add_signal_watch()
     bus.connect("message", bus_call, loop)
+    if no_display:
+        # Start streaming
+        rtsp_port_num = 8554
+
+        server = GstRtspServer.RTSPServer.new()
+        server.props.service = "%d" % rtsp_port_num
+        server.attach(None)
+
+        factory = GstRtspServer.RTSPMediaFactory.new()
+        factory.set_launch(
+            "( udpsrc name=pay0 port=%d buffer-size=524288 caps=\"application/x-rtp, media=video, clock-rate=90000, encoding-name=(string)%s, payload=96 \" )" % (
+            updsink_port_num, codec))
+        factory.set_shared(True)
+        server.get_mount_points().add_factory("/ds-test", factory)
+
+        print("\n *** DeepStream: Launched RTSP Streaming at rtsp://localhost:%d/ds-test ***\n\n" % rtsp_port_num)
 
     osdsinkpad = nvosd.get_static_pad("sink")
     if not osdsinkpad:
