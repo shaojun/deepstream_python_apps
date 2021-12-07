@@ -30,7 +30,7 @@ from common.is_aarch_64 import is_aarch64
 from common.bus_call import bus_call
 from common.utils import long_to_uint64
 import pyds
-
+import math
 MAX_DISPLAY_LEN = 64
 MAX_TIME_STAMP_LEN = 32
 PGIE_CLASS_ID_VEHICLE = 0
@@ -40,11 +40,14 @@ PGIE_CLASS_ID_ROADSIGN = 3
 MUXER_OUTPUT_WIDTH = 1920
 MUXER_OUTPUT_HEIGHT = 1080
 MUXER_BATCH_TIMEOUT_USEC = 4000000
+TILED_OUTPUT_WIDTH = 1280
+TILED_OUTPUT_HEIGHT = 720
 input_file = None
 schema_type = 0
 proto_lib = None
 conn_str = "localhost;2181;testTopic"
 cfg_file = None
+input_src_uri = None
 topic = None
 no_display = False
 
@@ -52,8 +55,94 @@ PGIE_CONFIG_FILE = "dstest51_pgie_config.txt"
 MSCONV_CONFIG_FILE = "dstest51_msgconv_config.txt"
 
 pgie_classes_str = ["Vehicle", "TwoWheeler", "Person", "Roadsign"]
+fps_streams={}
+# tiler_sink_pad_buffer_probe  will extract metadata received on OSD sink pad
+# and update params for drawing rectangle, object information etc.
+def tiler_src_pad_buffer_probe(pad,info,u_data):
+    frame_number=0
+    num_rects=0
+    gst_buffer = info.get_buffer()
+    if not gst_buffer:
+        print("Unable to get GstBuffer ")
+        return
 
+    # Retrieve batch metadata from the gst_buffer
+    # Note that pyds.gst_buffer_get_nvds_batch_meta() expects the
+    # C address of gst_buffer as input, which is obtained with hash(gst_buffer)
+    batch_meta = pyds.gst_buffer_get_nvds_batch_meta(hash(gst_buffer))
+    l_frame = batch_meta.frame_meta_list
+    while l_frame is not None:
+        try:
+            # Note that l_frame.data needs a cast to pyds.NvDsFrameMeta
+            # The casting is done by pyds.NvDsFrameMeta.cast()
+            # The casting also keeps ownership of the underlying memory
+            # in the C code, so the Python garbage collector will leave
+            # it alone.
+            frame_meta = pyds.NvDsFrameMeta.cast(l_frame.data)
+        except StopIteration:
+            break
 
+        frame_number=frame_meta.frame_num
+        l_obj=frame_meta.obj_meta_list
+        num_rects = frame_meta.num_obj_meta
+        obj_counter = {
+        PGIE_CLASS_ID_VEHICLE:0,
+        PGIE_CLASS_ID_PERSON:0,
+        PGIE_CLASS_ID_BICYCLE:0,
+        PGIE_CLASS_ID_ROADSIGN:0
+        }
+        while l_obj is not None:
+            try:
+                # Casting l_obj.data to pyds.NvDsObjectMeta
+                obj_meta=pyds.NvDsObjectMeta.cast(l_obj.data)
+                if (frame_number % 30) == 0:
+                    # Frequency of messages to be send will be based on use case.
+                    # Here message is being sent for first object every 30 frames.
+
+                    # Allocating an NvDsEventMsgMeta instance and getting
+                    # reference to it. The underlying memory is not manged by
+                    # Python so that downstream plugins can access it. Otherwise
+                    # the garbage collector will free it when this probe exits.
+                    msg_meta = pyds.alloc_nvds_event_msg_meta()
+                    msg_meta.bbox.top = obj_meta.rect_params.top
+                    msg_meta.bbox.left = obj_meta.rect_params.left
+                    msg_meta.bbox.width = obj_meta.rect_params.width
+                    msg_meta.bbox.height = obj_meta.rect_params.height
+                    msg_meta.frameId = frame_number
+                    msg_meta.trackingId = long_to_uint64(obj_meta.object_id)
+                    msg_meta.confidence = obj_meta.confidence
+                    msg_meta = generate_event_msg_meta(msg_meta, obj_meta.class_id)
+                    user_event_meta = pyds.nvds_acquire_user_meta_from_pool(
+                        batch_meta)
+                    if user_event_meta:
+                        user_event_meta.user_meta_data = msg_meta
+                        user_event_meta.base_meta.meta_type = pyds.NvDsMetaType.NVDS_EVENT_MSG_META
+                        # Setting callbacks in the event msg meta. The bindings
+                        # layer will wrap these callables in C functions.
+                        # Currently only one set of callbacks is supported.
+                        pyds.user_copyfunc(user_event_meta, meta_copy_func)
+                        pyds.user_releasefunc(user_event_meta, meta_free_func)
+                        pyds.nvds_add_user_meta_to_frame(frame_meta,
+                                                         user_event_meta)
+                    else:
+                        print("Error in attaching event meta to buffer\n")
+            except StopIteration:
+                break
+            obj_counter[obj_meta.class_id] += 1
+            try:
+                l_obj=l_obj.next
+            except StopIteration:
+                break
+        print("Frame Number=", frame_number, "Number of Objects=",num_rects,"Vehicle_count=",obj_counter[PGIE_CLASS_ID_VEHICLE],"Person_count=",obj_counter[PGIE_CLASS_ID_PERSON])
+
+        # Get frame rate through this probe
+        # fps_streams["stream{0}".format(frame_meta.pad_index)].get_fps()
+        try:
+            l_frame=l_frame.next
+        except StopIteration:
+            break
+
+    return Gst.PadProbeReturn.OK
 # Callback function for deep-copying an NvDsEventMsgMeta struct
 def meta_copy_func(data, user_data):
     # Cast data to pyds.NvDsUserMeta
@@ -444,6 +533,8 @@ def main(args):
             sys.stderr.write("Unable to create src pad bin \n")
         srcpad.link(sinkpad)
         number_sources += 1
+        # Shawn, we only support single one source for now, otherwise, the tiler element is required.
+        break
 
     # print("Creating H264Parser \n")
     # h264parser = Gst.ElementFactory.make("h264parse", "h264-parser")
@@ -462,6 +553,11 @@ def main(args):
     pgie = Gst.ElementFactory.make("nvinfer", "primary-inference")
     if not pgie:
         sys.stderr.write(" Unable to create pgie \n")
+
+    # print("Creating tiler \n ")
+    # tiler = Gst.ElementFactory.make("nvmultistreamtiler", "nvtiler")
+    # if not tiler:
+    #     sys.stderr.write(" Unable to create tiler \n")
 
     nvvidconv = Gst.ElementFactory.make("nvvideoconvert", "convertor")
     if not nvvidconv:
@@ -512,7 +608,21 @@ def main(args):
     streammux.set_property('height', 1080)
     streammux.set_property('batch-size', 1)
     streammux.set_property('batched-push-timeout', 4000000)
+
     pgie.set_property('config-file-path', PGIE_CONFIG_FILE)
+    pgie_batch_size = pgie.get_property("batch-size")
+    if pgie_batch_size != number_sources:
+        print(
+            "WARNING: Overriding infer-config batch-size",
+            pgie_batch_size,
+            " with number of sources",
+            number_sources,
+            " \n",
+        )
+        pgie.set_property("batch-size", number_sources)
+
+    print("Uploading data with Kafka plugin-> %s " % proto_lib)
+    print("     Uploading data with Kafka conn_str-> %s " % conn_str)
     msgconv.set_property('config', MSCONV_CONFIG_FILE)
     msgconv.set_property('payload-type', schema_type)
     msgbroker.set_property('proto-lib', proto_lib)
@@ -528,7 +638,18 @@ def main(args):
     # pipeline.add(h264parser)
     # pipeline.add(decoder)
     # pipeline.add(streammux)
+
+    # tiler_rows = int(math.sqrt(number_sources))
+    # tiler_columns = int(math.ceil((1.0 * number_sources) / tiler_rows))
+    # tiler.set_property("rows", tiler_rows)
+    # tiler.set_property("columns", tiler_columns)
+    # tiler.set_property("width", TILED_OUTPUT_WIDTH)
+    # tiler.set_property("height", TILED_OUTPUT_HEIGHT)
+
+    sink.set_property("qos", 0)
+
     pipeline.add(pgie)
+    # pipeline.add(tiler)
     pipeline.add(nvvidconv)
     pipeline.add(nvosd)
     pipeline.add(tee)
@@ -554,6 +675,8 @@ def main(args):
 
     streammux.link(pgie)
     pgie.link(nvvidconv)
+    # nvvidconv.link(tiler)
+    # tiler.link(nvosd)
     nvvidconv.link(nvosd)
     nvosd.link(tee)
     queue1.link(msgconv)
@@ -583,6 +706,12 @@ def main(args):
         sys.stderr.write(" Unable to get sink pad of nvosd \n")
 
     osdsinkpad.add_probe(Gst.PadProbeType.BUFFER, osd_sink_pad_buffer_probe, 0)
+
+    # tiler_src_pad = pgie.get_static_pad("src")
+    # if not tiler_src_pad:
+    #     sys.stderr.write(" Unable to get src pad \n")
+    # else:
+    #     tiler_src_pad.add_probe(Gst.PadProbeType.BUFFER, tiler_src_pad_buffer_probe, 0)
 
     print("Starting pipeline \n")
 
