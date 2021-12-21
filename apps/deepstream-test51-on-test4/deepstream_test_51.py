@@ -29,8 +29,11 @@ from optparse import OptionParser
 from common.is_aarch_64 import is_aarch64
 from common.bus_call import bus_call
 from common.utils import long_to_uint64
+from common.FPS import GETFPS
 import pyds
 import math
+import configparser
+
 MAX_DISPLAY_LEN = 64
 MAX_TIME_STAMP_LEN = 32
 PGIE_CLASS_ID_VEHICLE = 0
@@ -49,18 +52,21 @@ conn_str = "localhost;2181;testTopic"
 cfg_file = None
 input_src_uri = None
 topic = None
+sensor_id_str = None
 no_display = False
 
 PGIE_CONFIG_FILE = "dstest51_pgie_config.txt"
 MSCONV_CONFIG_FILE = "dstest51_msgconv_config.txt"
 
 pgie_classes_str = ["Vehicle", "TwoWheeler", "Person", "Roadsign"]
-fps_streams={}
+fps_streams = {}
+
+
 # tiler_sink_pad_buffer_probe  will extract metadata received on OSD sink pad
 # and update params for drawing rectangle, object information etc.
-def tiler_src_pad_buffer_probe(pad,info,u_data):
-    frame_number=0
-    num_rects=0
+def tiler_src_pad_buffer_probe(pad, info, u_data):
+    frame_number = 0
+    num_rects = 0
     gst_buffer = info.get_buffer()
     if not gst_buffer:
         print("Unable to get GstBuffer ")
@@ -82,19 +88,19 @@ def tiler_src_pad_buffer_probe(pad,info,u_data):
         except StopIteration:
             break
 
-        frame_number=frame_meta.frame_num
-        l_obj=frame_meta.obj_meta_list
+        frame_number = frame_meta.frame_num
+        l_obj = frame_meta.obj_meta_list
         num_rects = frame_meta.num_obj_meta
         obj_counter = {
-        PGIE_CLASS_ID_VEHICLE:0,
-        PGIE_CLASS_ID_PERSON:0,
-        PGIE_CLASS_ID_BICYCLE:0,
-        PGIE_CLASS_ID_ROADSIGN:0
+            PGIE_CLASS_ID_VEHICLE: 0,
+            PGIE_CLASS_ID_PERSON: 0,
+            PGIE_CLASS_ID_BICYCLE: 0,
+            PGIE_CLASS_ID_ROADSIGN: 0
         }
         while l_obj is not None:
             try:
                 # Casting l_obj.data to pyds.NvDsObjectMeta
-                obj_meta=pyds.NvDsObjectMeta.cast(l_obj.data)
+                obj_meta = pyds.NvDsObjectMeta.cast(l_obj.data)
                 if (frame_number % 30) == 0:
                     # Frequency of messages to be send will be based on use case.
                     # Here message is being sent for first object every 30 frames.
@@ -130,19 +136,22 @@ def tiler_src_pad_buffer_probe(pad,info,u_data):
                 break
             obj_counter[obj_meta.class_id] += 1
             try:
-                l_obj=l_obj.next
+                l_obj = l_obj.next
             except StopIteration:
                 break
-        print("Frame Number=", frame_number, "Number of Objects=",num_rects,"Vehicle_count=",obj_counter[PGIE_CLASS_ID_VEHICLE],"Person_count=",obj_counter[PGIE_CLASS_ID_PERSON])
+        print("Frame Number=", frame_number, "Number of Objects=", num_rects, "Vehicle_count=",
+              obj_counter[PGIE_CLASS_ID_VEHICLE], "Person_count=", obj_counter[PGIE_CLASS_ID_PERSON])
 
         # Get frame rate through this probe
-        # fps_streams["stream{0}".format(frame_meta.pad_index)].get_fps()
+        fps_streams["stream{0}".format(frame_meta.pad_index)].get_fps()
         try:
-            l_frame=l_frame.next
+            l_frame = l_frame.next
         except StopIteration:
             break
 
     return Gst.PadProbeReturn.OK
+
+
 # Callback function for deep-copying an NvDsEventMsgMeta struct
 def meta_copy_func(data, user_data):
     # Cast data to pyds.NvDsUserMeta
@@ -261,7 +270,7 @@ def generate_event_msg_meta(data, class_id):
     meta.sensorId = 0
     meta.placeId = 0
     meta.moduleId = 0
-    meta.sensorStr = "sensor-0"
+    meta.sensorStr = sensor_id_str
     meta.ts = pyds.alloc_buffer(MAX_TIME_STAMP_LEN + 1)
     pyds.generate_ts_rfc3339(meta.ts, MAX_TIME_STAMP_LEN)
 
@@ -273,18 +282,18 @@ def generate_event_msg_meta(data, class_id):
         meta.type = pyds.NvDsEventType.NVDS_EVENT_MOVING
         meta.objType = pyds.NvDsObjectType.NVDS_OBJECT_TYPE_VEHICLE
         meta.objClassId = PGIE_CLASS_ID_VEHICLE
-        obj = pyds.alloc_nvds_vehicle_object()
-        obj = generate_vehicle_meta(obj)
-        meta.extMsg = obj
-        meta.extMsgSize = sys.getsizeof(pyds.NvDsVehicleObject)
+        # obj = pyds.alloc_nvds_vehicle_object()
+        # obj = generate_vehicle_meta(obj)
+        # meta.extMsg = obj
+        # meta.extMsgSize = sys.getsizeof(pyds.NvDsVehicleObject)
     if class_id == PGIE_CLASS_ID_PERSON:
         meta.type = pyds.NvDsEventType.NVDS_EVENT_ENTRY
         meta.objType = pyds.NvDsObjectType.NVDS_OBJECT_TYPE_PERSON
         meta.objClassId = PGIE_CLASS_ID_PERSON
-        obj = pyds.alloc_nvds_person_object()
-        obj = generate_person_meta(obj)
-        meta.extMsg = obj
-        meta.extMsgSize = sys.getsizeof(pyds.NvDsPersonObject)
+        # obj = pyds.alloc_nvds_person_object()
+        # obj = generate_person_meta(obj)
+        # meta.extMsg = obj
+        # meta.extMsgSize = sys.getsizeof(pyds.NvDsPersonObject)
     return meta
 
 
@@ -367,7 +376,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
             # Ideally NVDS_EVENT_MSG_META should be attached to buffer by the
             # component implementing detection / recognition logic.
             # Here it demonstrates how to use / attach that meta data.
-            if is_first_object and (frame_number % 30) == 0:
+            if is_first_object and (frame_number % 60) == 0:
                 # Frequency of messages to be send will be based on use case.
                 # Here message is being sent for first object every 30 frames.
 
@@ -396,10 +405,12 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
                     pyds.user_releasefunc(user_event_meta, meta_free_func)
                     pyds.nvds_add_user_meta_to_frame(frame_meta,
                                                      user_event_meta)
+                    print("A user_event_meta is made for ", pgie_classes_str[obj_meta.class_id], " will uploading...")
                 else:
                     print("Error in attaching event meta to buffer\n")
 
-                is_first_object = False
+                # disable it as we want all objects uploading
+                # is_first_object = False
             try:
                 l_obj = l_obj.next
             except StopIteration:
@@ -408,11 +419,34 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
             l_frame = l_frame.next
         except StopIteration:
             break
+        # Get frame rate through this probe
+        currentFps = fps_streams["stream{0}".format(frame_meta.pad_index)].get_fps()
 
-    print("Frame Number =", frame_number, "Vehicle Count =",
-          obj_counter[PGIE_CLASS_ID_VEHICLE], "Person Count =",
-          obj_counter[PGIE_CLASS_ID_PERSON])
+        display_meta = pyds.nvds_acquire_display_meta_from_pool(batch_meta)
+        display_meta.num_labels = 1
+        py_nvosd_text_params = display_meta.text_params[0]
+        # Now set the offsets where the string should appear
+        py_nvosd_text_params.x_offset = 10
+        py_nvosd_text_params.y_offset = 12
+
+        # Font , font-color and font-size
+        py_nvosd_text_params.font_params.font_name = "Serif"
+        py_nvosd_text_params.font_params.font_size = 10
+        # set(red, green, blue, alpha); set to White
+        py_nvosd_text_params.font_params.font_color.set(1.0, 1.0, 1.0, 1.0)
+
+        # Text background color
+        py_nvosd_text_params.set_bg_clr = 1
+        # set(red, green, blue, alpha); set to Black
+        py_nvosd_text_params.text_bg_clr.set(0.0, 0.0, 0.0, 1.0)
+        py_nvosd_text_params.display_text = "Fps: {0}".format(currentFps)
+        pyds.nvds_add_display_meta_to_frame(frame_meta, display_meta)
+
+        print("Frame Number =", frame_number, "Vehicle Count =", obj_counter[PGIE_CLASS_ID_VEHICLE],
+              "Person Count =", obj_counter[PGIE_CLASS_ID_PERSON], "FPS =", )
+
     return Gst.PadProbeReturn.OK
+
 
 def cb_newpad(decodebin, decoder_src_pad, data):
     print("In cb_newpad\n")
@@ -487,6 +521,7 @@ def create_source_bin(index, uri):
         return None
     return nbin
 
+
 def main(args):
     GObject.threads_init()
     Gst.init(None)
@@ -532,6 +567,8 @@ def main(args):
         if not srcpad:
             sys.stderr.write("Unable to create src pad bin \n")
         srcpad.link(sinkpad)
+
+        fps_streams["stream{0}".format(number_sources)] = GETFPS(number_sources)
         number_sources += 1
         # Shawn, we only support single one source for now, otherwise, the tiler element is required.
         break
@@ -603,7 +640,7 @@ def main(args):
 
         codec = "H264"
         # default bitrate is 4000000
-        bitrate = 2000000
+        bitrate = 3000000
         # Make the encoder
         if codec == "H264":
             encoder = Gst.ElementFactory.make("nvv4l2h264enc", "encoder")
@@ -768,11 +805,11 @@ def main(args):
         factory = GstRtspServer.RTSPMediaFactory.new()
         factory.set_launch(
             "( udpsrc name=pay0 port=%d buffer-size=524288 caps=\"application/x-rtp, media=video, clock-rate=90000, encoding-name=(string)%s, payload=96 \" )" % (
-            updsink_port_num, codec))
+                updsink_port_num, codec))
         factory.set_shared(True)
-        server.get_mount_points().add_factory("/ds-test", factory)
+        server.get_mount_points().add_factory("/eow", factory)
 
-        print("\n *** DeepStream: Launched RTSP Streaming at rtsp://localhost:%d/ds-test ***\n\n" % rtsp_port_num)
+        print("\n *** DeepStream: Launched RTSP Streaming output at rtsp://localhost:%d/eow ***\n\n" % rtsp_port_num)
 
     osdsinkpad = nvosd.get_static_pad("sink")
     if not osdsinkpad:
@@ -819,7 +856,7 @@ def parse_args():
                            "it is part of config file.",
                       default="dev-iot.ipos.biz;9092",
                       metavar="STR")
-    parser.add_option("-s", "--schema-type", dest="schema_type", default="0",
+    parser.add_option("-s", "--schema-type", dest="schema_type", default="1",
                       help="Type of message schema (0=Full, 1=minimal), "
                            "default=0", metavar="<0|1>")
     parser.add_option("-t", "--topic", dest="topic",
@@ -838,6 +875,7 @@ def parse_args():
     global proto_lib
     global conn_str
     global topic
+    global sensor_id_str
     global schema_type
     global no_display
     cfg_file = options.cfg_file
@@ -851,7 +889,9 @@ def parse_args():
         print("Usage: python3 deepstream_test_51.py -i <rtsp:// or file://> -p "
               "<Proto adaptor library> --conn-str=<Connection string>")
         return 1
-
+    config = configparser.ConfigParser()
+    config.read('cfg_kafka.txt')
+    sensor_id_str = config['custom-uploader']['whoami']
     schema_type = 0 if options.schema_type == "0" else 1
 
 
