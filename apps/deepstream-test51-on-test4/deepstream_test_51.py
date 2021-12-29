@@ -54,8 +54,8 @@ input_src_uri = None
 topic = None
 sensor_id_str = None
 no_display = False
+pgie_config_file = ""
 
-PGIE_CONFIG_FILE = "dstest51_pgie_config.txt"
 MSCONV_CONFIG_FILE = "dstest51_msgconv_config.txt"
 
 pgie_classes_str = ["Vehicle", "TwoWheeler", "Person", "Roadsign"]
@@ -698,7 +698,7 @@ def main(args):
     streammux.set_property('batch-size', 1)
     streammux.set_property('batched-push-timeout', 4000000)
 
-    pgie.set_property('config-file-path', PGIE_CONFIG_FILE)
+    pgie.set_property('config-file-path', pgie_config_file)
     pgie_batch_size = pgie.get_property("batch-size")
     if pgie_batch_size != number_sources:
         print(
@@ -867,6 +867,10 @@ def parse_args():
     parser.add_option("", "--no-display", action="store_true",
                       dest="no_display", default=False,
                       help="Disable display")
+    parser.add_option("", "--pgie-config-file", dest="pgie_config_file",
+                      help="pgie file path",
+                      default="dstest51_pgie_config.txt",
+                      metavar="STR")
 
     (options, args) = parser.parse_args()
 
@@ -878,12 +882,14 @@ def parse_args():
     global sensor_id_str
     global schema_type
     global no_display
+    global pgie_config_file
     cfg_file = options.cfg_file
     input_src_uri = options.input_src_uri
     proto_lib = options.proto_lib
     conn_str = options.conn_str
     topic = options.topic
     no_display = options.no_display
+    pgie_config_file = options.pgie_config_file
 
     if not (proto_lib and input_src_uri):
         print("Usage: python3 deepstream_test_51.py -i <rtsp:// or file://> -p "
