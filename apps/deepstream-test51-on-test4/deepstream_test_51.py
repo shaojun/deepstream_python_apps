@@ -36,10 +36,10 @@ import configparser
 
 MAX_DISPLAY_LEN = 64
 MAX_TIME_STAMP_LEN = 32
-PGIE_CLASS_ID_VEHICLE = 0
-PGIE_CLASS_ID_BICYCLE = 1
-PGIE_CLASS_ID_PERSON = 2
-PGIE_CLASS_ID_ROADSIGN = 3
+PGIE_CLASS_ID_DoorWarningSign = 0
+PGIE_CLASS_ID_People = 1
+PGIE_CLASS_ID_TwoWheeler = 2
+# PGIE_CLASS_ID_ROADSIGN = 3
 MUXER_OUTPUT_WIDTH = 1920
 MUXER_OUTPUT_HEIGHT = 1080
 MUXER_BATCH_TIMEOUT_USEC = 4000000
@@ -54,11 +54,12 @@ input_src_uri = None
 topic = None
 sensor_id_str = None
 no_display = False
+no_output_rtsp = False
 pgie_config_file = ""
 
 MSCONV_CONFIG_FILE = "dstest51_msgconv_config.txt"
 
-pgie_classes_str = ["Vehicle", "TwoWheeler", "Person", "Roadsign"]
+pgie_classes_str = ["DoorWarningSign", "People", "TwoWheeler", "____", "Roadsign"]
 fps_streams = {}
 
 
@@ -92,10 +93,10 @@ def tiler_src_pad_buffer_probe(pad, info, u_data):
         l_obj = frame_meta.obj_meta_list
         num_rects = frame_meta.num_obj_meta
         obj_counter = {
-            PGIE_CLASS_ID_VEHICLE: 0,
-            PGIE_CLASS_ID_PERSON: 0,
-            PGIE_CLASS_ID_BICYCLE: 0,
-            PGIE_CLASS_ID_ROADSIGN: 0
+            PGIE_CLASS_ID_DoorWarningSign: 0,
+            PGIE_CLASS_ID_TwoWheeler: 0,
+            PGIE_CLASS_ID_People: 0,
+            # PGIE_CLASS_ID_ROADSIGN: 0
         }
         while l_obj is not None:
             try:
@@ -139,8 +140,8 @@ def tiler_src_pad_buffer_probe(pad, info, u_data):
                 l_obj = l_obj.next
             except StopIteration:
                 break
-        print("Frame Number=", frame_number, "Number of Objects=", num_rects, "Vehicle_count=",
-              obj_counter[PGIE_CLASS_ID_VEHICLE], "Person_count=", obj_counter[PGIE_CLASS_ID_PERSON])
+        print("Frame Number=", frame_number, "Number of Objects=", num_rects, "DoorWarningSign_count=",
+              obj_counter[PGIE_CLASS_ID_DoorWarningSign], "TwoWheeler_count=", obj_counter[PGIE_CLASS_ID_TwoWheeler])
 
         # Get frame rate through this probe
         fps_streams["stream{0}".format(frame_meta.pad_index)].get_fps()
@@ -244,24 +245,35 @@ def meta_free_func(data, user_data):
         srcmeta.extMsgSize = 0
 
 
-def generate_vehicle_meta(data):
+def generate_DoorWarningSign_meta(data):
     obj = pyds.NvDsVehicleObject.cast(data)
-    obj.type = "sedan"
-    obj.color = "blue"
-    obj.make = "Bugatti"
+    obj.type = "DoorWarningSign"
+    obj.color = "y"
+    obj.make = "B"
     obj.model = "M"
-    obj.license = "XX1234"
-    obj.region = "CA"
+    obj.license = "l"
+    obj.region = "CN"
+    return obj
+
+
+def generate_TwoWheeler_meta(data):
+    obj = pyds.NvDsVehicleObject.cast(data)
+    obj.type = "TwoWheeler"
+    obj.color = "b"
+    obj.make = "B"
+    obj.model = "M"
+    obj.license = "X"
+    obj.region = "CN"
     return obj
 
 
 def generate_person_meta(data):
     obj = pyds.NvDsPersonObject.cast(data)
-    obj.age = 45
-    obj.cap = "none"
-    obj.hair = "black"
-    obj.gender = "male"
-    obj.apparel = "formal"
+    obj.age = 18
+    obj.cap = "n"
+    obj.hair = "b"
+    obj.gender = "m"
+    obj.apparel = "f"
     return obj
 
 
@@ -278,22 +290,31 @@ def generate_event_msg_meta(data, class_id):
     # Any custom object as per requirement can be generated and attached
     # like NvDsVehicleObject / NvDsPersonObject. Then that object should
     # be handled in payload generator library (nvmsgconv.cpp) accordingly.
-    if class_id == PGIE_CLASS_ID_VEHICLE:
-        meta.type = pyds.NvDsEventType.NVDS_EVENT_MOVING
+    if class_id == PGIE_CLASS_ID_DoorWarningSign:
+        meta.type = pyds.NvDsEventType.NVDS_EVENT_ENTRY
         meta.objType = pyds.NvDsObjectType.NVDS_OBJECT_TYPE_VEHICLE
-        meta.objClassId = PGIE_CLASS_ID_VEHICLE
-        # obj = pyds.alloc_nvds_vehicle_object()
-        # obj = generate_vehicle_meta(obj)
-        # meta.extMsg = obj
-        # meta.extMsgSize = sys.getsizeof(pyds.NvDsVehicleObject)
-    if class_id == PGIE_CLASS_ID_PERSON:
+        meta.objClassId = PGIE_CLASS_ID_DoorWarningSign
+        obj = pyds.alloc_nvds_vehicle_object()
+        obj = generate_DoorWarningSign_meta(obj)
+        meta.extMsg = obj
+        meta.extMsgSize = sys.getsizeof(pyds.NvDsVehicleObject)
+    if class_id == PGIE_CLASS_ID_TwoWheeler:
+        meta.type = pyds.NvDsEventType.NVDS_EVENT_ENTRY
+        meta.objType = pyds.NvDsObjectType.NVDS_OBJECT_TYPE_VEHICLE
+        meta.objClassId = PGIE_CLASS_ID_TwoWheeler
+        obj = pyds.alloc_nvds_vehicle_object()
+        obj = generate_TwoWheeler_meta(obj)
+        meta.extMsg = obj
+        meta.extMsgSize = sys.getsizeof(pyds.NvDsVehicleObject)
+    if class_id == PGIE_CLASS_ID_People:
         meta.type = pyds.NvDsEventType.NVDS_EVENT_ENTRY
         meta.objType = pyds.NvDsObjectType.NVDS_OBJECT_TYPE_PERSON
-        meta.objClassId = PGIE_CLASS_ID_PERSON
-        # obj = pyds.alloc_nvds_person_object()
-        # obj = generate_person_meta(obj)
-        # meta.extMsg = obj
-        # meta.extMsgSize = sys.getsizeof(pyds.NvDsPersonObject)
+        meta.objClassId = PGIE_CLASS_ID_People
+        obj = pyds.alloc_nvds_person_object()
+        obj = generate_person_meta(obj)
+        meta.extMsg = obj
+        meta.extMsgSize = sys.getsizeof(pyds.NvDsPersonObject)
+
     return meta
 
 
@@ -308,10 +329,10 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
     frame_number = 0
     # Intiallizing object counter with 0.
     obj_counter = {
-        PGIE_CLASS_ID_VEHICLE: 0,
-        PGIE_CLASS_ID_PERSON: 0,
-        PGIE_CLASS_ID_BICYCLE: 0,
-        PGIE_CLASS_ID_ROADSIGN: 0
+        PGIE_CLASS_ID_DoorWarningSign: 0,
+        PGIE_CLASS_ID_TwoWheeler: 0,
+        PGIE_CLASS_ID_People: 0,
+        # PGIE_CLASS_ID_ROADSIGN: 0
     }
     gst_buffer = info.get_buffer()
     if not gst_buffer:
@@ -396,6 +417,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
                 user_event_meta = pyds.nvds_acquire_user_meta_from_pool(
                     batch_meta)
                 if user_event_meta:
+                    print("A user_event_meta is made for ", pgie_classes_str[obj_meta.class_id], " will uploading...")
                     user_event_meta.user_meta_data = msg_meta
                     user_event_meta.base_meta.meta_type = pyds.NvDsMetaType.NVDS_EVENT_MSG_META
                     # Setting callbacks in the event msg meta. The bindings
@@ -405,7 +427,6 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
                     pyds.user_releasefunc(user_event_meta, meta_free_func)
                     pyds.nvds_add_user_meta_to_frame(frame_meta,
                                                      user_event_meta)
-                    print("A user_event_meta is made for ", pgie_classes_str[obj_meta.class_id], " will uploading...")
                 else:
                     print("Error in attaching event meta to buffer\n")
 
@@ -442,8 +463,9 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
         py_nvosd_text_params.display_text = "Fps: {0}".format(currentFps)
         pyds.nvds_add_display_meta_to_frame(frame_meta, display_meta)
 
-        print("Frame Number =", frame_number, "Vehicle Count =", obj_counter[PGIE_CLASS_ID_VEHICLE],
-              "Person Count =", obj_counter[PGIE_CLASS_ID_PERSON], "FPS =", )
+        print("Fps: {0}".format(currentFps), "FraNo.:", frame_number, "DWS:",
+              obj_counter[PGIE_CLASS_ID_DoorWarningSign],
+              "EB:", obj_counter[PGIE_CLASS_ID_TwoWheeler], "Pep", obj_counter[PGIE_CLASS_ID_People])
 
     return Gst.PadProbeReturn.OK
 
@@ -625,62 +647,63 @@ def main(args):
         sys.stderr.write(" Unable to create queue2 \n")
 
     if no_display:
-        # print("Creating FakeSink \n")
-        # sink = Gst.ElementFactory.make("fakesink", "fakesink")
-        # if not sink:
-        #     sys.stderr.write(" Unable to create fakesink \n")
+        if no_output_rtsp:
+            print("Creating FakeSink \n")
+            sink = Gst.ElementFactory.make("fakesink", "fakesink")
+            if not sink:
+                sys.stderr.write(" Unable to create fakesink \n")
+        else:
+            # shawn, we create a RTSP out here
+            nvvidconv_postosd = Gst.ElementFactory.make("nvvideoconvert", "convertor_postosd")
+            if not nvvidconv_postosd:
+                sys.stderr.write(" Unable to create nvvidconv_postosd \n")
+            # Create a caps filter
+            caps = Gst.ElementFactory.make("capsfilter", "filter")
+            caps.set_property("caps", Gst.Caps.from_string("video/x-raw(memory:NVMM), format=I420"))
 
-        # shawn, we create a RTSP out here
-        nvvidconv_postosd = Gst.ElementFactory.make("nvvideoconvert", "convertor_postosd")
-        if not nvvidconv_postosd:
-            sys.stderr.write(" Unable to create nvvidconv_postosd \n")
-        # Create a caps filter
-        caps = Gst.ElementFactory.make("capsfilter", "filter")
-        caps.set_property("caps", Gst.Caps.from_string("video/x-raw(memory:NVMM), format=I420"))
+            codec = "H264"
+            # default bitrate is 4000000
+            bitrate = 3000000
+            # Make the encoder
+            if codec == "H264":
+                encoder = Gst.ElementFactory.make("nvv4l2h264enc", "encoder")
+                print("Creating H264 Encoder")
+            elif codec == "H265":
+                encoder = Gst.ElementFactory.make("nvv4l2h265enc", "encoder")
+                print("Creating H265 Encoder")
+            if not encoder:
+                sys.stderr.write(" Unable to create encoder")
+            encoder.set_property('bitrate', bitrate)
+            if is_aarch64():
+                encoder.set_property('preset-level', 1)
+                encoder.set_property('insert-sps-pps', 1)
+                encoder.set_property('bufapi-version', 1)
 
-        codec = "H264"
-        # default bitrate is 4000000
-        bitrate = 3000000
-        # Make the encoder
-        if codec == "H264":
-            encoder = Gst.ElementFactory.make("nvv4l2h264enc", "encoder")
-            print("Creating H264 Encoder")
-        elif codec == "H265":
-            encoder = Gst.ElementFactory.make("nvv4l2h265enc", "encoder")
-            print("Creating H265 Encoder")
-        if not encoder:
-            sys.stderr.write(" Unable to create encoder")
-        encoder.set_property('bitrate', bitrate)
-        if is_aarch64():
-            encoder.set_property('preset-level', 1)
-            encoder.set_property('insert-sps-pps', 1)
-            encoder.set_property('bufapi-version', 1)
+            # Make the payload-encode video into RTP packets
+            if codec == "H264":
+                rtppay = Gst.ElementFactory.make("rtph264pay", "rtppay")
+                print("Creating H264 rtppay")
+            elif codec == "H265":
+                rtppay = Gst.ElementFactory.make("rtph265pay", "rtppay")
+                print("Creating H265 rtppay")
+            if not rtppay:
+                sys.stderr.write(" Unable to create rtppay")
 
-        # Make the payload-encode video into RTP packets
-        if codec == "H264":
-            rtppay = Gst.ElementFactory.make("rtph264pay", "rtppay")
-            print("Creating H264 rtppay")
-        elif codec == "H265":
-            rtppay = Gst.ElementFactory.make("rtph265pay", "rtppay")
-            print("Creating H265 rtppay")
-        if not rtppay:
-            sys.stderr.write(" Unable to create rtppay")
+            # Make the UDP sink
+            updsink_port_num = 5400
+            sink = Gst.ElementFactory.make("udpsink", "udpsink")
+            if not sink:
+                sys.stderr.write(" Unable to create udpsink")
 
-        # Make the UDP sink
-        updsink_port_num = 5400
-        sink = Gst.ElementFactory.make("udpsink", "udpsink")
-        if not sink:
-            sys.stderr.write(" Unable to create udpsink")
+            sink.set_property('host', '224.224.255.255')
+            sink.set_property('port', updsink_port_num)
+            sink.set_property('async', False)
+            sink.set_property('sync', 1)
 
-        sink.set_property('host', '224.224.255.255')
-        sink.set_property('port', updsink_port_num)
-        sink.set_property('async', False)
-        sink.set_property('sync', 1)
-
-        pipeline.add(nvvidconv_postosd)
-        pipeline.add(caps)
-        pipeline.add(encoder)
-        pipeline.add(rtppay)
+            pipeline.add(nvvidconv_postosd)
+            pipeline.add(caps)
+            pipeline.add(encoder)
+            pipeline.add(rtppay)
     else:
         if is_aarch64():
             transform = Gst.ElementFactory.make("nvegltransform",
@@ -774,12 +797,15 @@ def main(args):
         queue2.link(transform)
         transform.link(sink)
     else:
-        queue2.link(nvvidconv_postosd)
-        # nvosd.link(nvvidconv_postosd)
-        nvvidconv_postosd.link(caps)
-        caps.link(encoder)
-        encoder.link(rtppay)
-        rtppay.link(sink)
+        if no_output_rtsp:
+            queue2.link(sink)
+        else:
+            queue2.link(nvvidconv_postosd)
+            # nvosd.link(nvvidconv_postosd)
+            nvvidconv_postosd.link(caps)
+            caps.link(encoder)
+            encoder.link(rtppay)
+            rtppay.link(sink)
     sink_pad = queue1.get_static_pad("sink")
     tee_msg_pad = tee.get_request_pad('src_%u')
     tee_render_pad = tee.get_request_pad("src_%u")
@@ -794,7 +820,7 @@ def main(args):
     bus = pipeline.get_bus()
     bus.add_signal_watch()
     bus.connect("message", bus_call, loop)
-    if no_display:
+    if no_display and not no_output_rtsp:
         # Start streaming
         rtsp_port_num = 8554
 
@@ -866,10 +892,13 @@ def parse_args():
                       metavar="TOPIC")
     parser.add_option("", "--no-display", action="store_true",
                       dest="no_display", default=False,
-                      help="Disable display")
+                      help="Disable local display window")
+    parser.add_option("", "--no-output-rtsp", action="store_true",
+                      dest="no_output_rtsp", default=False,
+                      help="Disable output result to a rtsp stream")
     parser.add_option("", "--pgie-config-file", dest="pgie_config_file",
                       help="pgie file path",
-                      default="dstest51_pgie_config.txt",
+                      default="config_infer_primary_elenet.txt",
                       metavar="STR")
 
     (options, args) = parser.parse_args()
@@ -882,6 +911,7 @@ def parse_args():
     global sensor_id_str
     global schema_type
     global no_display
+    global no_output_rtsp
     global pgie_config_file
     cfg_file = options.cfg_file
     input_src_uri = options.input_src_uri
@@ -889,6 +919,7 @@ def parse_args():
     conn_str = options.conn_str
     topic = options.topic
     no_display = options.no_display
+    no_output_rtsp = options.no_output_rtsp
     pgie_config_file = options.pgie_config_file
 
     if not (proto_lib and input_src_uri):
