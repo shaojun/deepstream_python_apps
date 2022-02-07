@@ -716,8 +716,14 @@ def main(args):
 
     print("Playing input src URI(s)-> %s " % input_src_uri)
     # source.set_property('location', input_file)
-    streammux.set_property('width', 1920)
-    streammux.set_property('height', 1080)
+    pgie_config_file_parser = configparser.ConfigParser()
+    if pgie_config_file_parser.read(pgie_config_file) and pgie_config_file_parser['property']['input-dims']:
+        pgie_input_dims_str = pgie_config_file_parser['property']['input-dims']
+        streammux.set_property('width', int(pgie_input_dims_str.split(";")[2]))
+        streammux.set_property('height', int(pgie_input_dims_str.split(";")[1]))
+    else:
+        streammux.set_property('width', 1280)
+        streammux.set_property('height', 720)
     streammux.set_property('batch-size', 1)
     streammux.set_property('batched-push-timeout', 4000000)
 
