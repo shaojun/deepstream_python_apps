@@ -1,0 +1,3 @@
+door_warning_sign
+people
+electric_bicycle
