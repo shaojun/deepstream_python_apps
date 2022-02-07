@@ -397,7 +397,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
             # Ideally NVDS_EVENT_MSG_META should be attached to buffer by the
             # component implementing detection / recognition logic.
             # Here it demonstrates how to use / attach that meta data.
-            if is_first_object and (frame_number % 60) == 0:
+            if is_first_object and (frame_number % 48) == 0:
                 # Frequency of messages to be send will be based on use case.
                 # Here message is being sent for first object every 30 frames.
 
