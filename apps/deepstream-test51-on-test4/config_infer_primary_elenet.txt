@@ -33,7 +33,7 @@ tlt-encoded-model=models/elenet/resnet18_detector.etlt
 labelfile-path=models/elenet/labels.txt
 model-engine-file=models/elenet/resnet18_elenet_pruned.etlt_b1_gpu0_int8.engine
 
-input-dims=3;544;960;0
+input-dims=3;1280;960;0
 uff-input-blob-name=input_1
 batch-size=1
 process-mode=1
