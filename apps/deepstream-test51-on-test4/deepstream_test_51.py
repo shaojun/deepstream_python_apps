@@ -25,6 +25,7 @@ import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import GObject, Gst, GstRtspServer
 import sys
+import os
 from optparse import OptionParser
 from common.is_aarch_64 import is_aarch64
 from common.bus_call import bus_call
@@ -932,8 +933,13 @@ def parse_args():
         print("Usage: python3 deepstream_test_51.py -i <rtsp:// or file://> -p "
               "<Proto adaptor library> --conn-str=<Connection string>")
         return 1
+
+    if not os.path.exists('/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/config_elenet.txt'):
+        print("Could not find config_elenet.txt under "
+              "/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/")
+        return 1
     config = configparser.ConfigParser()
-    config.read('cfg_kafka.txt')
+    config.read('/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/config_elenet.txt')
     sensor_id_str = config['custom-uploader']['whoami']
     schema_type = 0 if options.schema_type == "0" else 1
 

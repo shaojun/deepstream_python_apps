@@ -16,5 +16,3 @@
 ################################################################################
 [message-broker]
 partition-key = sensor.id
-[custom-uploader]
-whoami = default_shaoLocalJsNxBoard

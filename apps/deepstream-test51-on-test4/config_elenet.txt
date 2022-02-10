@@ -1,0 +1,2 @@
+[custom-uploader]
+whoami = default_shaoLocalJsNxBoard
