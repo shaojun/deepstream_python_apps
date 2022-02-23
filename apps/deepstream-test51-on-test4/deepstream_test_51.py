@@ -40,6 +40,7 @@ MAX_TIME_STAMP_LEN = 32
 PGIE_CLASS_ID_DoorWarningSign = 0
 PGIE_CLASS_ID_People = 1
 PGIE_CLASS_ID_TwoWheeler = 2
+PGIE_CLASS_ID_Bicycle = 3
 # PGIE_CLASS_ID_ROADSIGN = 3
 MUXER_OUTPUT_WIDTH = 1920
 MUXER_OUTPUT_HEIGHT = 1080
@@ -60,7 +61,7 @@ pgie_config_file = ""
 
 MSCONV_CONFIG_FILE = "dstest51_msgconv_config.txt"
 
-pgie_classes_str = ["DoorWarningSign", "People", "TwoWheeler", "____", "Roadsign"]
+pgie_classes_str = ["DoorWarningSign", "People", "TwoWheeler", "Bicycle", "Roadsign"]
 fps_streams = {}
 
 
@@ -333,6 +334,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
         PGIE_CLASS_ID_DoorWarningSign: 0,
         PGIE_CLASS_ID_TwoWheeler: 0,
         PGIE_CLASS_ID_People: 0,
+        PGIE_CLASS_ID_Bicycle: 0,
         # PGIE_CLASS_ID_ROADSIGN: 0
     }
     gst_buffer = info.get_buffer()
@@ -466,7 +468,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
 
         print("Fps: {0}".format(currentFps), "FraNo.:", frame_number, "DWS:",
               obj_counter[PGIE_CLASS_ID_DoorWarningSign],
-              "EB:", obj_counter[PGIE_CLASS_ID_TwoWheeler], "Pep", obj_counter[PGIE_CLASS_ID_People])
+              "EB:", obj_counter[PGIE_CLASS_ID_TwoWheeler], "Pep", obj_counter[PGIE_CLASS_ID_People], "Bic", obj_counter[PGIE_CLASS_ID_Bicycle])
 
     return Gst.PadProbeReturn.OK
 
