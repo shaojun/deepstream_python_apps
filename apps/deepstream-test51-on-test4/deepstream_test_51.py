@@ -268,6 +268,15 @@ def generate_TwoWheeler_meta(data):
     obj.region = "CN"
     return obj
 
+def generate_Bicycle_meta(data):
+    obj = pyds.NvDsVehicleObject.cast(data)
+    obj.type = "Bicycle"
+    obj.color = "b"
+    obj.make = "B"
+    obj.model = "M"
+    obj.license = "X"
+    obj.region = "CN"
+    return obj
 
 def generate_person_meta(data):
     obj = pyds.NvDsPersonObject.cast(data)
@@ -306,6 +315,14 @@ def generate_event_msg_meta(data, class_id):
         meta.objClassId = PGIE_CLASS_ID_TwoWheeler
         obj = pyds.alloc_nvds_vehicle_object()
         obj = generate_TwoWheeler_meta(obj)
+        meta.extMsg = obj
+        meta.extMsgSize = sys.getsizeof(pyds.NvDsVehicleObject)
+    if class_id == PGIE_CLASS_ID_Bicycle:
+        meta.type = pyds.NvDsEventType.NVDS_EVENT_ENTRY
+        meta.objType = pyds.NvDsObjectType.NVDS_OBJECT_TYPE_VEHICLE
+        meta.objClassId = PGIE_CLASS_ID_Bicycle
+        obj = pyds.alloc_nvds_vehicle_object()
+        obj = generate_Bicycle_meta(obj)
         meta.extMsg = obj
         meta.extMsgSize = sys.getsizeof(pyds.NvDsVehicleObject)
     if class_id == PGIE_CLASS_ID_People:
