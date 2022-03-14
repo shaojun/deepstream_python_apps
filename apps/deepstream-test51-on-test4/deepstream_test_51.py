@@ -32,8 +32,10 @@ from common.bus_call import bus_call
 from common.utils import long_to_uint64
 from common.FPS import GETFPS
 import pyds
-import math
+import numpy as np
+import cv2
 import configparser
+import base64
 
 MAX_DISPLAY_LEN = 64
 MAX_TIME_STAMP_LEN = 32
@@ -258,15 +260,16 @@ def generate_DoorWarningSign_meta(data):
     return obj
 
 
-def generate_TwoWheeler_meta(data):
+def generate_TwoWheeler_meta(data, extra_field):
     obj = pyds.NvDsVehicleObject.cast(data)
     obj.type = "TwoWheeler"
     obj.color = "b"
     obj.make = "B"
     obj.model = "M"
     obj.license = "X"
-    obj.region = "CN"
+    obj.region = extra_field
     return obj
+
 
 def generate_Bicycle_meta(data):
     obj = pyds.NvDsVehicleObject.cast(data)
@@ -278,6 +281,7 @@ def generate_Bicycle_meta(data):
     obj.region = "CN"
     return obj
 
+
 def generate_person_meta(data):
     obj = pyds.NvDsPersonObject.cast(data)
     obj.age = 18
@@ -288,7 +292,7 @@ def generate_person_meta(data):
     return obj
 
 
-def generate_event_msg_meta(data, class_id):
+def generate_event_msg_meta(data, object_meta, gst_buffer, frame_meta):
     meta = pyds.NvDsEventMsgMeta.cast(data)
     meta.sensorId = 0
     meta.placeId = 0
@@ -301,7 +305,7 @@ def generate_event_msg_meta(data, class_id):
     # Any custom object as per requirement can be generated and attached
     # like NvDsVehicleObject / NvDsPersonObject. Then that object should
     # be handled in payload generator library (nvmsgconv.cpp) accordingly.
-    if class_id == PGIE_CLASS_ID_DoorWarningSign:
+    if object_meta.class_id == PGIE_CLASS_ID_DoorWarningSign:
         meta.type = pyds.NvDsEventType.NVDS_EVENT_ENTRY
         meta.objType = pyds.NvDsObjectType.NVDS_OBJECT_TYPE_VEHICLE
         meta.objClassId = PGIE_CLASS_ID_DoorWarningSign
@@ -309,15 +313,35 @@ def generate_event_msg_meta(data, class_id):
         obj = generate_DoorWarningSign_meta(obj)
         meta.extMsg = obj
         meta.extMsgSize = sys.getsizeof(pyds.NvDsVehicleObject)
-    if class_id == PGIE_CLASS_ID_TwoWheeler:
+    if object_meta.class_id == PGIE_CLASS_ID_TwoWheeler:
         meta.type = pyds.NvDsEventType.NVDS_EVENT_ENTRY
         meta.objType = pyds.NvDsObjectType.NVDS_OBJECT_TYPE_VEHICLE
         meta.objClassId = PGIE_CLASS_ID_TwoWheeler
+
+        # crop the target object and send it out with base64 str
+        n_frame = pyds.get_nvds_buf_surface(hash(gst_buffer), frame_meta.batch_id)
+        # convert python array into numy array format.
+        frame_image = np.array(n_frame, copy=True, order='C')
+        frame_image = crop_target_object_to_image(frame_image, object_meta, object_meta.confidence)
+        # convert the array into cv2 default color format
+        frame_copy = cv2.cvtColor(frame_image, cv2.COLOR_RGBA2BGRA)
+        retval, buffer = cv2.imencode('.jpg', frame_copy)
+        base64_bytes = base64.b64encode(buffer)
+        obj_base64_encoded_text = base64_bytes.decode('ascii')
+
         obj = pyds.alloc_nvds_vehicle_object()
-        obj = generate_TwoWheeler_meta(obj)
+        obj = generate_TwoWheeler_meta(obj, obj_base64_encoded_text)
         meta.extMsg = obj
         meta.extMsgSize = sys.getsizeof(pyds.NvDsVehicleObject)
-    if class_id == PGIE_CLASS_ID_Bicycle:
+        # generate a local file, for debug purpose
+        if False:
+            img_path = os.path.join(os.getcwd(), "frames",
+                                    "cropped_object_" + str(frame_meta.pad_index) + "_" + str(
+                                        frame_meta.frame_num) + ".jpg")
+            print("writing cropped image to: " + img_path + "\n" + obj_base64_encoded_text)
+            cv2.imwrite(img_path, frame_copy)
+
+    if object_meta.class_id == PGIE_CLASS_ID_Bicycle:
         meta.type = pyds.NvDsEventType.NVDS_EVENT_ENTRY
         meta.objType = pyds.NvDsObjectType.NVDS_OBJECT_TYPE_VEHICLE
         meta.objClassId = PGIE_CLASS_ID_Bicycle
@@ -325,7 +349,7 @@ def generate_event_msg_meta(data, class_id):
         obj = generate_Bicycle_meta(obj)
         meta.extMsg = obj
         meta.extMsgSize = sys.getsizeof(pyds.NvDsVehicleObject)
-    if class_id == PGIE_CLASS_ID_People:
+    if object_meta.class_id == PGIE_CLASS_ID_People:
         meta.type = pyds.NvDsEventType.NVDS_EVENT_ENTRY
         meta.objType = pyds.NvDsObjectType.NVDS_OBJECT_TYPE_PERSON
         meta.objClassId = PGIE_CLASS_ID_People
@@ -433,9 +457,10 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
                 msg_meta.frameId = frame_number
                 msg_meta.trackingId = long_to_uint64(obj_meta.object_id)
                 msg_meta.confidence = obj_meta.confidence
-                msg_meta = generate_event_msg_meta(msg_meta, obj_meta.class_id)
+                msg_meta = generate_event_msg_meta(msg_meta, obj_meta, gst_buffer, frame_meta)
                 user_event_meta = pyds.nvds_acquire_user_meta_from_pool(
                     batch_meta)
+
                 if user_event_meta:
                     print("A user_event_meta is made for ", pgie_classes_str[obj_meta.class_id], " will uploading...")
                     user_event_meta.user_meta_data = msg_meta
@@ -485,9 +510,27 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
 
         print("Fps: {0}".format(currentFps), "FraNo.:", frame_number, "DWS:",
               obj_counter[PGIE_CLASS_ID_DoorWarningSign],
-              "EB:", obj_counter[PGIE_CLASS_ID_TwoWheeler], "Pep", obj_counter[PGIE_CLASS_ID_People], "Bic", obj_counter[PGIE_CLASS_ID_Bicycle])
+              "EB:", obj_counter[PGIE_CLASS_ID_TwoWheeler], "Pep", obj_counter[PGIE_CLASS_ID_People], "Bic",
+              obj_counter[PGIE_CLASS_ID_Bicycle])
 
     return Gst.PadProbeReturn.OK
+
+
+def crop_target_object_to_image(image, obj_meta, confidence):
+    confidence = '{0:.2f}'.format(confidence)
+    rect_params = obj_meta.rect_params
+    top = int(rect_params.top)
+    left = int(rect_params.left)
+    width = int(rect_params.width)
+    height = int(rect_params.height)
+    obj_name = pgie_classes_str[obj_meta.class_id]
+    cropped = image[top:top + height, left:left + width]
+    return cropped
+
+    # image=cv2.rectangle(image,(left,top),(left+width,top+height),(0,0,255,0),2)
+    # # Note that on some systems cv2.putText erroneously draws horizontal lines across the image
+    # image=cv2.putText(image,obj_name+',C='+str(confidence),(left-10,top-10),cv2.FONT_HERSHEY_SIMPLEX,0.5,(0,0,255,0),2)
+    # return image
 
 
 def cb_newpad(decodebin, decoder_src_pad, data):
