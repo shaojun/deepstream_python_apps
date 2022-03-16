@@ -260,14 +260,14 @@ def generate_DoorWarningSign_meta(data):
     return obj
 
 
-def generate_TwoWheeler_meta(data, extra_field):
+def generate_TwoWheeler_meta(data, base64_image_data):
     obj = pyds.NvDsVehicleObject.cast(data)
     obj.type = "TwoWheeler"
     obj.color = "b"
     obj.make = "B"
     obj.model = "M"
     obj.license = "X"
-    obj.region = extra_field
+    obj.region = "base64_image_data:" + base64_image_data
     return obj
 
 
