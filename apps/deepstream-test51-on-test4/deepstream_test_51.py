@@ -36,6 +36,7 @@ import numpy as np
 import cv2
 import configparser
 import base64
+import datetime
 
 MAX_DISPLAY_LEN = 64
 MAX_TIME_STAMP_LEN = 32
@@ -51,6 +52,7 @@ TILED_OUTPUT_WIDTH = 1280
 TILED_OUTPUT_HEIGHT = 720
 input_file = None
 schema_type = 0
+upload_interval = None
 proto_lib = None
 conn_str = "localhost;2181;testTopic"
 cfg_file = None
@@ -61,6 +63,7 @@ no_display = False
 no_output_rtsp = False
 pgie_config_file = ""
 
+last_uploading_datetime = datetime.datetime.now()
 MSCONV_CONFIG_FILE = "dstest51_msgconv_config.txt"
 
 pgie_classes_str = ["DoorWarningSign", "People", "TwoWheeler", "Bicycle", "Roadsign"]
@@ -369,6 +372,7 @@ def generate_event_msg_meta(data, object_meta, gst_buffer, frame_meta):
 # b) loops inside probe() callback could be costly in python.
 #    So users shall optimize according to their use-case.
 def osd_sink_pad_buffer_probe(pad, info, u_data):
+    global last_uploading_datetime
     frame_number = 0
     # Intiallizing object counter with 0.
     obj_counter = {
@@ -389,6 +393,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
     batch_meta = pyds.gst_buffer_get_nvds_batch_meta(hash(gst_buffer))
     if not batch_meta:
         return Gst.PadProbeReturn.OK
+    is_object_uploaded_in_cur_batch_of_frames = False
     l_frame = batch_meta.frame_meta_list
     while l_frame is not None:
         try:
@@ -441,7 +446,8 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
             # Ideally NVDS_EVENT_MSG_META should be attached to buffer by the
             # component implementing detection / recognition logic.
             # Here it demonstrates how to use / attach that meta data.
-            if is_first_object and (frame_number % 48) == 0:
+            if (datetime.datetime.now() - last_uploading_datetime).total_seconds() * 1000 >= upload_interval:
+                is_object_uploaded_in_cur_batch_of_frames = True
                 # Frequency of messages to be send will be based on use case.
                 # Here message is being sent for first object every 30 frames.
 
@@ -513,6 +519,8 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
               "EB:", obj_counter[PGIE_CLASS_ID_TwoWheeler], "Pep", obj_counter[PGIE_CLASS_ID_People], "Bic",
               obj_counter[PGIE_CLASS_ID_Bicycle])
 
+    if is_object_uploaded_in_cur_batch_of_frames:
+        last_uploading_datetime = datetime.datetime.now()
     return Gst.PadProbeReturn.OK
 
 
@@ -780,10 +788,10 @@ def main(args):
     print("Playing input src URI(s)-> %s " % input_src_uri)
     # source.set_property('location', input_file)
     pgie_config_file_parser = configparser.ConfigParser()
-    if pgie_config_file_parser.read(pgie_config_file) and pgie_config_file_parser['property']['input-dims']:
-        pgie_input_dims_str = pgie_config_file_parser['property']['input-dims']
-        streammux.set_property('width', int(pgie_input_dims_str.split(";")[2]))
-        streammux.set_property('height', int(pgie_input_dims_str.split(";")[1]))
+    if pgie_config_file_parser.read(pgie_config_file) and pgie_config_file_parser['property']['infer-dims']:
+        pgie_infer_dims_str = pgie_config_file_parser['property']['infer-dims']
+        streammux.set_property('width', int(pgie_infer_dims_str.split(";")[2]))
+        streammux.set_property('height', int(pgie_infer_dims_str.split(";")[1]))
     else:
         streammux.set_property('width', 1280)
         streammux.set_property('height', 720)
@@ -959,6 +967,10 @@ def parse_args():
                            "connection string or config file.",
                       default="test",
                       metavar="TOPIC")
+    parser.add_option("", "--upload-interval", dest="upload_interval",
+                      help="the interval for each uploading the detected object json data to kafka server, by ms",
+                      default=1500,
+                      type=int)
     parser.add_option("", "--no-display", action="store_true",
                       dest="no_display", default=False,
                       help="Disable local display window")
@@ -977,6 +989,7 @@ def parse_args():
     global proto_lib
     global conn_str
     global topic
+    global upload_interval
     global sensor_id_str
     global schema_type
     global no_display
@@ -987,6 +1000,7 @@ def parse_args():
     proto_lib = options.proto_lib
     conn_str = options.conn_str
     topic = options.topic
+    upload_interval = options.upload_interval
     no_display = options.no_display
     no_output_rtsp = options.no_output_rtsp
     pgie_config_file = options.pgie_config_file

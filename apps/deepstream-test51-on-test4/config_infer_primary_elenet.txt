@@ -33,7 +33,7 @@ tlt-encoded-model=models/elenet/resnet18_detector.etlt
 labelfile-path=models/elenet/labels.txt
 model-engine-file=models/elenet/resnet18_elenet_pruned.etlt_b1_gpu0_int8.engine
 
-input-dims=3;1280;960;0
+infer-dims=3;1280;960
 uff-input-blob-name=input_1
 batch-size=1
 process-mode=1
@@ -41,7 +41,7 @@ model-color-format=0
 ## 0=FP32, 1=INT8, 2=FP16 mode
 network-mode=1
 num-detected-classes=4
-interval=7
+interval=6
 gie-unique-id=1
 output-blob-names=output_bbox/BiasAdd;output_cov/Sigmoid
 cluster-mode=2
