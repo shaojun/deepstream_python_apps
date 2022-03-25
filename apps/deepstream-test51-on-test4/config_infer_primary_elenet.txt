@@ -40,7 +40,7 @@ process-mode=1
 model-color-format=0
 ## 0=FP32, 1=INT8, 2=FP16 mode
 network-mode=1
-num-detected-classes=4
+num-detected-classes=3
 interval=6
 gie-unique-id=1
 output-blob-names=output_bbox/BiasAdd;output_cov/Sigmoid
@@ -65,7 +65,7 @@ roi-bottom-offset=0
 [class-attrs-2]
 topk=20
 #higher for show more occlude objects
-nms-iou-threshold=0.4
+nms-iou-threshold=0.2
 #higher for show more confident detections
 pre-cluster-threshold=0.6
 
