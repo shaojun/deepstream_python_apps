@@ -964,8 +964,8 @@ def parse_args():
                            "default=0", metavar="<0|1>")
     parser.add_option("-t", "--topic", dest="topic",
                       help="Name of message topic. Optional if it is part of "
-                           "connection string or config file.",
-                      default="test",
+                           "connection string or config file. leave null will use board id as topic",
+                      default="",
                       metavar="TOPIC")
     parser.add_option("", "--upload-interval", dest="upload_interval",
                       help="the interval for each uploading the detected object json data to kafka server, by ms",
@@ -1017,6 +1017,8 @@ def parse_args():
     config = configparser.ConfigParser()
     config.read('/opt/nvidia/deepstream/deepstream-6.0/samples/configs/deepstream-app/config_elenet.txt')
     sensor_id_str = config['custom-uploader']['whoami']
+    if not topic:
+        topic = sensor_id_str
     schema_type = 0 if options.schema_type == "0" else 1
 
 
