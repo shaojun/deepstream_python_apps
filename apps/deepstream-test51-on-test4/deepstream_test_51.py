@@ -68,6 +68,7 @@ MSCONV_CONFIG_FILE = "dstest51_msgconv_config.txt"
 
 pgie_classes_str = ["DoorWarningSign", "People", "TwoWheeler", "Bicycle", "Roadsign"]
 fps_streams = {}
+currentFps = None
 
 
 # tiler_sink_pad_buffer_probe  will extract metadata received on OSD sink pad
@@ -255,8 +256,8 @@ def meta_free_func(data, user_data):
 def generate_DoorWarningSign_meta(data):
     obj = pyds.NvDsVehicleObject.cast(data)
     obj.type = "DoorWarningSign"
-    obj.color = "y"
-    obj.make = "B"
+    obj.color = "Y"
+    obj.make = str(currentFps)
     obj.model = "M"
     obj.license = "l"
     obj.region = "CN"
@@ -266,8 +267,8 @@ def generate_DoorWarningSign_meta(data):
 def generate_TwoWheeler_meta(data, base64_image_data):
     obj = pyds.NvDsVehicleObject.cast(data)
     obj.type = "TwoWheeler"
-    obj.color = "b"
-    obj.make = "B"
+    obj.color = "Y"
+    obj.make = str(currentFps)
     obj.model = "M"
     obj.license = "X"
     obj.region = "base64_image_data:" + base64_image_data
@@ -290,7 +291,7 @@ def generate_person_meta(data):
     obj.age = 18
     obj.cap = "n"
     obj.hair = "b"
-    obj.gender = "m"
+    obj.gender = str(currentFps)
     obj.apparel = "f"
     return obj
 
@@ -373,6 +374,7 @@ def generate_event_msg_meta(data, object_meta, gst_buffer, frame_meta):
 #    So users shall optimize according to their use-case.
 def osd_sink_pad_buffer_probe(pad, info, u_data):
     global last_uploading_datetime
+    global currentFps
     frame_number = 0
     # Intiallizing object counter with 0.
     obj_counter = {
