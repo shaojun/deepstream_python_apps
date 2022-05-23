@@ -40,7 +40,7 @@ process-mode=1
 model-color-format=0
 ## 0=FP32, 1=INT8, 2=FP16 mode
 network-mode=1
-num-detected-classes=3
+num-detected-classes=4
 interval=6
 gie-unique-id=1
 output-blob-names=output_bbox/BiasAdd;output_cov/Sigmoid

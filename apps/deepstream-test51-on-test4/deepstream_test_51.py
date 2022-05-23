@@ -43,7 +43,7 @@ MAX_TIME_STAMP_LEN = 32
 PGIE_CLASS_ID_DoorWarningSign = 0
 PGIE_CLASS_ID_People = 1
 PGIE_CLASS_ID_TwoWheeler = 2
-PGIE_CLASS_ID_Bicycle = 3
+PGIE_CLASS_ID_GasTank = 3
 # PGIE_CLASS_ID_ROADSIGN = 3
 MUXER_OUTPUT_WIDTH = 1920
 MUXER_OUTPUT_HEIGHT = 1080
@@ -66,7 +66,7 @@ pgie_config_file = ""
 last_uploading_datetime = datetime.datetime.now()
 MSCONV_CONFIG_FILE = "dstest51_msgconv_config.txt"
 
-pgie_classes_str = ["DoorWarningSign", "People", "TwoWheeler", "Bicycle", "Roadsign"]
+pgie_classes_str = ["DoorWarningSign", "People", "TwoWheeler", "GasTank", "__weird__"]
 fps_streams = {}
 currentFps = None
 
@@ -104,7 +104,7 @@ def tiler_src_pad_buffer_probe(pad, info, u_data):
             PGIE_CLASS_ID_DoorWarningSign: 0,
             PGIE_CLASS_ID_TwoWheeler: 0,
             PGIE_CLASS_ID_People: 0,
-            # PGIE_CLASS_ID_ROADSIGN: 0
+            PGIE_CLASS_ID_GasTank: 0
         }
         while l_obj is not None:
             try:
@@ -275,9 +275,9 @@ def generate_TwoWheeler_meta(data, base64_image_data):
     return obj
 
 
-def generate_Bicycle_meta(data):
+def generate_GasTank_meta(data):
     obj = pyds.NvDsVehicleObject.cast(data)
-    obj.type = "Bicycle"
+    obj.type = "GasTank"
     obj.color = "b"
     obj.make = "B"
     obj.model = "M"
@@ -345,12 +345,12 @@ def generate_event_msg_meta(data, object_meta, gst_buffer, frame_meta):
             print("writing cropped image to: " + img_path + "\n" + obj_base64_encoded_text)
             cv2.imwrite(img_path, frame_copy)
 
-    if object_meta.class_id == PGIE_CLASS_ID_Bicycle:
+    if object_meta.class_id == PGIE_CLASS_ID_GasTank:
         meta.type = pyds.NvDsEventType.NVDS_EVENT_ENTRY
         meta.objType = pyds.NvDsObjectType.NVDS_OBJECT_TYPE_VEHICLE
-        meta.objClassId = PGIE_CLASS_ID_Bicycle
+        meta.objClassId = PGIE_CLASS_ID_GasTank
         obj = pyds.alloc_nvds_vehicle_object()
-        obj = generate_Bicycle_meta(obj)
+        obj = generate_GasTank_meta(obj)
         meta.extMsg = obj
         meta.extMsgSize = sys.getsizeof(pyds.NvDsVehicleObject)
     if object_meta.class_id == PGIE_CLASS_ID_People:
@@ -381,7 +381,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
         PGIE_CLASS_ID_DoorWarningSign: 0,
         PGIE_CLASS_ID_TwoWheeler: 0,
         PGIE_CLASS_ID_People: 0,
-        PGIE_CLASS_ID_Bicycle: 0,
+        PGIE_CLASS_ID_GasTank: 0,
         # PGIE_CLASS_ID_ROADSIGN: 0
     }
     gst_buffer = info.get_buffer()
@@ -518,8 +518,8 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
 
         print("Fps: {0}".format(currentFps), "FraNo.:", frame_number, "DWS:",
               obj_counter[PGIE_CLASS_ID_DoorWarningSign],
-              "EB:", obj_counter[PGIE_CLASS_ID_TwoWheeler], "Pep", obj_counter[PGIE_CLASS_ID_People], "Bic",
-              obj_counter[PGIE_CLASS_ID_Bicycle])
+              "EB:", obj_counter[PGIE_CLASS_ID_TwoWheeler], "Pep", obj_counter[PGIE_CLASS_ID_People], "GT",
+              obj_counter[PGIE_CLASS_ID_GasTank])
 
     if is_object_uploaded_in_cur_batch_of_frames:
         last_uploading_datetime = datetime.datetime.now()
