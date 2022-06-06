@@ -959,7 +959,7 @@ def parse_args():
     parser.add_option("", "--conn-str", dest="conn_str",
                       help="Connection string of backend server. Optional if "
                            "it is part of config file.",
-                      default="dev-iot.ipos.biz;9092",
+                      default="msg.glfiot.com;9092",
                       metavar="STR")
     parser.add_option("-s", "--schema-type", dest="schema_type", default="1",
                       help="Type of message schema (0=Full, 1=minimal), "
